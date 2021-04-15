@@ -1,0 +1,16 @@
+
+[package]
+name = "sliders"
+version = "0.0.1"
+authors = ["yazgoo <yazgoo@gmail.com>"]
+edition = "2018"
+license = "MIT"
+description = "sliders widget in the terminal"
+readme = "README.md"
+homepage = "https://github.com/yazgoo/sliders"
+repository = "https://github.com/yazgoo/sliders"
+keywords = ["terminal"]
+categories = []
+
+[dependencies]
+crossterm = "0.19"
