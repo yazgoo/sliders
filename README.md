@@ -33,7 +33,7 @@ $ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer {
 # volume mixer
 
 ```bash
-$ cargo run -- --name backlight \
+$ cargo run -- --name volume \
                --get "amixer sget Master | tail -1 | cut -d'[' -f2 | cut -d'%' -f1" \
                --set "amixer sset Master {}%"
 ```
