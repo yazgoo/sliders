@@ -26,4 +26,6 @@ cargo run -- --name hello --get 'cat hello.counter' --set 'echo % > hello.counte
 
 You can use this to update your backlight with [backlight-mixer](https://github.com/yazgoo/backlight-mixer).
 
-cargo run -- --name backlight --get 'backlight-mixer' --set 'backlight-mixer %'
+```bash
+$ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer %"
+```
