@@ -18,8 +18,8 @@ $ echo 0 > world.counter
 Then, let's launch two sliders which will write/read to/from those files:
 
 ```bash
-cargo run -- --name hello --get 'cat hello.counter' --set 'echo % > hello.counter' \
-             --name world --get 'cat world.counter' --set 'echo % > world.counter'
+cargo run -- --name hello --get 'cat hello.counter' --set 'echo {} > hello.counter' \
+             --name world --get 'cat world.counter' --set 'echo {} > world.counter'
 ``` 
 
 # backlight-mixer
@@ -27,5 +27,13 @@ cargo run -- --name hello --get 'cat hello.counter' --set 'echo % > hello.counte
 You can use this to update your backlight with [backlight-mixer](https://github.com/yazgoo/backlight-mixer).
 
 ```bash
-$ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer %"
+$ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer {}"
+```
+
+# volume mixer
+
+```bash
+$ cargo run -- --name backlight \
+             --get "amixer sget Master | tail -1 | cut -d'[' -f2 | cut -d'%' -f1" \
+             --set "amixer sset Master {}%"
 ```

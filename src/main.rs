@@ -37,7 +37,7 @@ impl Slider {
         self.current = value;
         Command::new("sh")
             .arg("-c")
-            .arg(self.set_command.replace("%", format!("{}", value).as_str()))
+            .arg(self.set_command.replace("{}", format!("{}", value).as_str()))
             .output()?;
         Ok(())
     }
