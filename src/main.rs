@@ -1,5 +1,6 @@
 use std::env;
 use std::error::Error;
+use std::process::Command;
 use crossterm::{execute,cursor::MoveTo,event::{read, Event, KeyCode},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
 use std::io::{stdout, Write};
 
@@ -8,6 +9,61 @@ struct Slider {
     get_command: String,
     set_command: String,
     current: u8,
+}
+
+fn trim_newline(s: &mut String) {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+}
+
+impl Slider {
+
+    fn get(&mut self) -> Result<u8, Box<dyn Error>> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(self.get_command.clone())
+            .output()?;
+        let mut contents = String::from_utf8_lossy(&output.stdout).to_string();
+        if contents.ends_with('\n') { contents.pop(); }
+        let res = contents.parse()?;
+        Ok(res)
+    }
+
+    fn set(&mut self, value: u8) -> Result<(), Box<dyn Error>> {
+        self.current = value;
+        Command::new("sh")
+            .arg("-c")
+            .arg(self.set_command.replace("%", format!("{}", value).as_str()))
+            .output()?;
+        Ok(())
+    }
+
+    fn inc(&mut self) -> Result<(), Box<dyn Error>> {
+        let val = self.get()?;
+        if val < 100 { 
+            self.set(val + 1)?;
+            self.current = val + 1;
+        }
+        Ok(())
+    }
+
+    fn dec(&mut self) -> Result<(), Box<dyn Error>> {
+        let val = self.get()?;
+        if val > 0 { 
+            self.set(val - 1)?; 
+            self.current = val - 1;
+        }
+        Ok(())
+    }
+
+    fn initialize(&mut self) -> Result<(), Box<dyn Error>> {
+        self.current = self.get()?;
+        Ok(())
+    }
 }
 
 fn parse_args() -> Result<Vec<Slider>, Box<dyn Error>> {
@@ -34,8 +90,12 @@ fn parse_args() -> Result<Vec<Slider>, Box<dyn Error>> {
             name: names[i].clone(),
             get_command: get_commands[i].clone(),
             set_command: set_commands[i].clone(),
-            current: 50,
+            current: 25,
         });
+    }
+
+    for slider in &mut sliders {
+        slider.initialize()?;
     }
 
     Ok(sliders)
@@ -56,7 +116,7 @@ fn draw(sliders: &Vec<Slider>, current: &mut usize) -> Result<(), Box<dyn Error>
         stdout() .execute(MoveTo(0, y))?;
         for (i, slider) in sliders.iter().enumerate() {
             let value = slider.current as u16;
-            let start_y = (rows - vertical_margin) * value / 100;
+            let start_y = (rows - vertical_margin) * (100 - value) / 100;
             if y > vertical_margin && y < (rows - vertical_margin) {
                 print!("{}", spaces);
                 if y > start_y {
@@ -110,8 +170,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         match read_key()? {
             KeyCode::Left => if current > 0 { current -= 1 },
             KeyCode::Right => if current < (sliders.len() - 1) { current += 1 },
-            KeyCode::Up => if slider.current < 100 { sliders[current].current += 1 },
-            KeyCode::Down => if slider.current > 0 { sliders[current].current -= 1 },
+            KeyCode::Up => if slider.current < 100 { sliders[current].inc()? },
+            KeyCode::Down => if slider.current > 0 { sliders[current].dec()? },
             KeyCode::Char('q') => break,
             _ => {},
         }
