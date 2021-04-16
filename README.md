@@ -34,6 +34,6 @@ $ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer {
 
 ```bash
 $ cargo run -- --name backlight \
-             --get "amixer sget Master | tail -1 | cut -d'[' -f2 | cut -d'%' -f1" \
-             --set "amixer sset Master {}%"
+               --get "amixer sget Master | tail -1 | cut -d'[' -f2 | cut -d'%' -f1" \
+               --set "amixer sset Master {}%"
 ```
