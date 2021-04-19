@@ -1,7 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::process::Command;
-use crossterm::{cursor::MoveTo,event::{read, Event, KeyCode, KeyModifiers},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
+use crossterm::{cursor::{Show,Hide,MoveTo},event::{read, Event, KeyCode, KeyModifiers},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
 use std::io::stdout;
 
 trait SetterGetter {
@@ -105,7 +105,7 @@ impl Sliders {
         let spaces_count = (cols as usize / sliders.len() - 5) / 2;
         let spaces = format!("{:width$}", "", width=spaces_count);
         for y in 0..(rows - 1) {
-            stdout() .execute(MoveTo(0, y))?;
+            stdout().execute(MoveTo(0, y))?;
             for (i, slider) in sliders.iter().enumerate() {
                 let value = slider.current as u16;
                 let start_y = (rows - vertical_margin) * (100 - value) / 100;
@@ -153,8 +153,32 @@ impl Sliders {
         }
     }
 
+    fn print_help() -> Result<(), Box<dyn Error>> {
+        disable_raw_mode()?;
+        stdout() .execute(MoveTo(4, 4))?;
+        println!(r#"
+      ╭─────────────────────────────────────╮
+      │ h, left arrow    previous slider    │
+      │ l, right arrow   next slider        │
+      │ k, up arrow      increment slider   │
+      │ j, down arrow    decrement slider   │
+      │ g                set slider to 0    │
+      │ G                set slider to 100  │
+      │ m                set slider to 50   │
+      │ ?                prints this help   │
+      │ q                exit               │
+      │ ctrl+u           increment 10       │
+      │ ctrl+d           decrement 10       │
+      ╰─────────────────────────────────────╯
+        "#);
+        enable_raw_mode()?;
+        Sliders::read_key()?;
+        Ok(())
+    }
+
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut current = 0;
+        stdout().execute(Hide)?;
         enable_raw_mode()?;
         loop {
             Sliders::draw(&self.sliders, &mut current)?;
@@ -166,6 +190,7 @@ impl Sliders {
                 (KeyCode::Char('g'), _) => self.sliders[current].set(0)?,
                 (KeyCode::Char('G'), _) => self.sliders[current].set(100)?,
                 (KeyCode::Char('m'), _) => self.sliders[current].set(50)?,
+                (KeyCode::Char('?'), _) => Sliders::print_help()?,
                 (KeyCode::Char('q'), _) => break,
                 (KeyCode::Char('u'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].inc(10)?,
                 (KeyCode::Char('d'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].dec(10)?,
@@ -173,6 +198,7 @@ impl Sliders {
             }
         }
         disable_raw_mode()?;
+        stdout().execute(Show)?;
         Sliders::clear()?;
         Ok(())
     }
