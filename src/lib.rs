@@ -1,7 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::process::Command;
-use crossterm::{cursor::MoveTo,event::{read, Event, KeyCode},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
+use crossterm::{cursor::MoveTo,event::{read, Event, KeyCode, KeyModifiers},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
 use std::io::stdout;
 
 trait SetterGetter {
@@ -144,11 +144,11 @@ impl Sliders {
         Ok(())
     }
 
-    fn read_key() -> Result<KeyCode, Box<dyn Error>> {
+    fn read_key() -> Result<(KeyCode, KeyModifiers), Box<dyn Error>> {
         loop {
             if let Event::Key(e) = read()?
             {
-                return Ok(e.code);
+                return Ok((e.code, e.modifiers));
             }
         }
     }
@@ -159,14 +159,16 @@ impl Sliders {
         loop {
             Sliders::draw(&self.sliders, &mut current)?;
             match Sliders::read_key()? {
-                KeyCode::Char('h') | KeyCode::Left => if current > 0 { current -= 1 },
-                KeyCode::Char('l') | KeyCode::Right => if current < (self.sliders.len() - 1) { current += 1 },
-                KeyCode::Char('k') | KeyCode::Up => self.sliders[current].inc(1)?,
-                KeyCode::Char('j') | KeyCode::Down => self.sliders[current].dec(1)?,
-                KeyCode::Char('g') => self.sliders[current].set(0)?,
-                KeyCode::Char('G') => self.sliders[current].set(100)?,
-                KeyCode::Char('m') => self.sliders[current].set(50)?,
-                KeyCode::Char('q') => break,
+                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => if current > 0 { current -= 1 },
+                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => if current < (self.sliders.len() - 1) { current += 1 },
+                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => self.sliders[current].inc(1)?,
+                (KeyCode::Char('j'), _) | (KeyCode::Down , _)=> self.sliders[current].dec(1)?,
+                (KeyCode::Char('g'), _) => self.sliders[current].set(0)?,
+                (KeyCode::Char('G'), _) => self.sliders[current].set(100)?,
+                (KeyCode::Char('m'), _) => self.sliders[current].set(50)?,
+                (KeyCode::Char('q'), _) => break,
+                (KeyCode::Char('u'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].inc(10)?,
+                (KeyCode::Char('d'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].dec(10)?,
                 _ => {},
             }
         }
