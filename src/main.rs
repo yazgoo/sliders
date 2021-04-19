@@ -1,61 +1,45 @@
 use std::env;
 use std::error::Error;
 use std::process::Command;
-use crossterm::{execute,cursor::MoveTo,event::{read, Event, KeyCode},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
-use std::io::{stdout, Write};
+use crossterm::{cursor::MoveTo,event::{read, Event, KeyCode},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
+use std::io::stdout;
+
+trait SetterGetter {
+    fn get(&self) -> Result<u8, Box<dyn Error>>;
+    fn set(&self, value: u8) -> Result<(), Box<dyn Error>>;
+}
 
 struct Slider {
     name: String,
-    get_command: String,
-    set_command: String,
+    setter_getter: Box<dyn SetterGetter>,
     current: u8,
-}
-
-fn trim_newline(s: &mut String) {
-    if s.ends_with('\n') {
-        s.pop();
-        if s.ends_with('\r') {
-            s.pop();
-        }
-    }
 }
 
 impl Slider {
 
     fn get(&mut self) -> Result<u8, Box<dyn Error>> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(self.get_command.clone())
-            .output()?;
-        let mut contents = String::from_utf8_lossy(&output.stdout).to_string();
-        if contents.ends_with('\n') { contents.pop(); }
-        let res = contents.parse()?;
-        Ok(res)
+        self.setter_getter.get()
     }
 
     fn set(&mut self, value: u8) -> Result<(), Box<dyn Error>> {
         self.current = value;
-        Command::new("sh")
-            .arg("-c")
-            .arg(self.set_command.replace("{}", format!("{}", value).as_str()))
-            .output()?;
-        Ok(())
+        self.setter_getter.set(value)
     }
 
-    fn inc(&mut self) -> Result<(), Box<dyn Error>> {
+    fn inc(&mut self, n: u8) -> Result<(), Box<dyn Error>> {
         let val = self.get()?;
-        if val < 100 { 
-            self.set(val + 1)?;
-            self.current = val + 1;
+        if (val + n) <= 100 { 
+            self.set(val + n)?;
+            self.current = val + n;
         }
         Ok(())
     }
 
-    fn dec(&mut self) -> Result<(), Box<dyn Error>> {
+    fn dec(&mut self, n: u8) -> Result<(), Box<dyn Error>> {
         let val = self.get()?;
-        if val > 0 { 
-            self.set(val - 1)?; 
-            self.current = val - 1;
+        if val >= n { 
+            self.set(val - n)?; 
+            self.current = val - n;
         }
         Ok(())
     }
@@ -66,39 +50,105 @@ impl Slider {
     }
 }
 
-fn parse_args() -> Result<Vec<Slider>, Box<dyn Error>> {
-    let mut names = vec![];
-    let mut get_commands = vec![];
-    let mut set_commands = vec![];
+struct CommandLineSetterGetter {
+    get_command: String,
+    set_command: String,
+}
 
-    let mut i = 1;
-    let args : Vec<String> = env::args().collect();
-    while i < args.len()  {
-        match args[i].as_str() {
-            "--name" => names.push(args[i + 1].clone()),
-            "--get" => get_commands.push(args[i + 1].clone()),
-            "--set" => set_commands.push(args[i + 1].clone()),
-            _ => {},
+impl SetterGetter for CommandLineSetterGetter {
+
+    fn get(&self) -> Result<u8, Box<dyn Error>> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(self.get_command.clone())
+            .output()?;
+        let mut contents = String::from_utf8_lossy(&output.stdout).to_string();
+        if contents.ends_with('\n') { contents.pop(); }
+        let res = contents.parse()?;
+        Ok(res)
+    }
+
+    fn set(&self, value: u8) -> Result<(), Box<dyn Error>> {
+        Command::new("sh")
+            .arg("-c")
+            .arg(self.set_command.replace("{}", format!("{}", value).as_str()))
+            .output()?;
+        Ok(())
+    }
+
+}
+
+fn command_line_slider(name: String, get_command: String, set_command: String) -> Slider {
+
+    Slider {
+        name,
+        setter_getter: Box::new(CommandLineSetterGetter { get_command, set_command }),
+        current: 25,
+    }
+}
+
+struct Sliders {
+    sliders: Vec<Slider>
+}
+
+impl Sliders {
+    fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut current = 0;
+        enable_raw_mode()?;
+        loop {
+            draw(&self.sliders, &mut current)?;
+            match read_key()? {
+                KeyCode::Char('h') | KeyCode::Left => if current > 0 { current -= 1 },
+                KeyCode::Char('l') | KeyCode::Right => if current < (self.sliders.len() - 1) { current += 1 },
+                KeyCode::Char('k') | KeyCode::Up => self.sliders[current].inc(1)?,
+                KeyCode::Char('j') | KeyCode::Down => self.sliders[current].dec(1)?,
+                KeyCode::Char('g') => self.sliders[current].set(0)?,
+                KeyCode::Char('G') => self.sliders[current].set(100)?,
+                KeyCode::Char('m') => self.sliders[current].set(50)?,
+                KeyCode::Char('q') => break,
+                _ => {},
+            }
         }
-        i += 2;
+        disable_raw_mode()?;
+        clear()?;
+        Ok(())
     }
 
-    let mut sliders = vec![];
+    fn from_args() -> Result<Sliders, Box<dyn Error>> {
+        let mut names = vec![];
+        let mut get_commands = vec![];
+        let mut set_commands = vec![];
 
-    for i in 0..names.len() {
-        sliders.push(Slider {
-            name: names[i].clone(),
-            get_command: get_commands[i].clone(),
-            set_command: set_commands[i].clone(),
-            current: 25,
-        });
+        let mut i = 1;
+        let args : Vec<String> = env::args().collect();
+        while i < args.len()  {
+            match args[i].as_str() {
+                "--name" => names.push(args[i + 1].clone()),
+                "--get" => get_commands.push(args[i + 1].clone()),
+                "--set" => set_commands.push(args[i + 1].clone()),
+                _ => {},
+            }
+            i += 2;
+        }
+
+        let mut sliders = vec![];
+
+        for i in 0..names.len() {
+            let get_command = get_commands[i].clone();
+            let set_command = set_commands[i].clone();
+            sliders.push(command_line_slider(
+                    names[i].clone(),
+                    get_command,
+                    set_command));
+        }
+
+        for slider in &mut sliders {
+            slider.initialize()?;
+        }
+
+        Ok(Sliders { sliders })
     }
 
-    for slider in &mut sliders {
-        slider.initialize()?;
-    }
-
-    Ok(sliders)
 }
 
 fn clear() -> Result<(), Box<dyn Error>> {
@@ -160,23 +210,7 @@ fn read_key() -> Result<KeyCode, Box<dyn Error>> {
         }
     }
 }
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut sliders = parse_args()?;
-    let mut current = 0;
-    enable_raw_mode()?;
-    loop {
-        draw(&sliders, &mut current)?;
-        let slider = &sliders[current];
-        match read_key()? {
-            KeyCode::Left => if current > 0 { current -= 1 },
-            KeyCode::Right => if current < (sliders.len() - 1) { current += 1 },
-            KeyCode::Up => if slider.current < 100 { sliders[current].inc()? },
-            KeyCode::Down => if slider.current > 0 { sliders[current].dec()? },
-            KeyCode::Char('q') => break,
-            _ => {},
-        }
-    }
-    disable_raw_mode()?;
-    clear()?;
-    Ok(())
+    Sliders::from_args()?.run()
 }
