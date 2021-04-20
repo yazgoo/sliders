@@ -17,3 +17,4 @@ crossterm = "0.19"
 
 [dev-dependencies]
 rodio = "0.13" 
+blockish = "0.0.9"

@@ -199,6 +199,7 @@ impl Sliders {
         Ok(true)
     }
 
+
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         stdout().execute(Hide)?;
         Sliders::clear()?;
