@@ -1,12 +1,18 @@
 # sliders
 
-sliders in the terminal
+sliders in the terminal.
+can be used as a binary or as a crate.
 
-# screenshot
+# screenshots
 
 ![screenshot](screenshot.png)
 
-# example 
+![screenshot rgb](screenshot_rgb.gif)
+screenshot from [examples/rgb.rs](examples/rgb.rs).
+
+# using as a binary
+
+## files counters
 
 For this example, let's store counter in 2 files
 
@@ -22,7 +28,7 @@ cargo run -- --name hello --get 'cat hello.counter' --set 'echo {} > hello.count
              --name world --get 'cat world.counter' --set 'echo {} > world.counter'
 ``` 
 
-# backlight-mixer
+## backlight-mixer
 
 You can use this to update your backlight with [backlight-mixer](https://github.com/yazgoo/backlight-mixer).
 
@@ -30,7 +36,7 @@ You can use this to update your backlight with [backlight-mixer](https://github.
 $ cargo run -- --name backlight --get "backlight-mixer" --set "backlight-mixer {}"
 ```
 
-# volume mixer
+## volume mixer
 
 ```bash
 $ cargo run -- --name volume \
