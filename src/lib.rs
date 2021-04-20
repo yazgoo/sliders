@@ -4,15 +4,15 @@ use std::process::Command;
 use crossterm::{cursor::{Show,Hide,MoveTo},event::{read, Event, KeyCode, KeyModifiers},terminal::{size, Clear, ClearType, enable_raw_mode, disable_raw_mode}, ExecutableCommand};
 use std::io::stdout;
 
-trait SetterGetter {
-    fn get(&self) -> Result<u8, Box<dyn Error>>;
-    fn set(&self, value: u8) -> Result<(), Box<dyn Error>>;
+pub trait SetterGetter {
+    fn get(&mut self) -> Result<u8, Box<dyn Error>>;
+    fn set(&mut self, value: u8) -> Result<(), Box<dyn Error>>;
 }
 
-struct Slider {
-    name: String,
-    setter_getter: Box<dyn SetterGetter>,
-    current: u8,
+pub struct Slider {
+    pub name: String,
+    pub setter_getter: Box<dyn SetterGetter>,
+    pub current: u8,
 }
 
 impl Slider {
@@ -57,7 +57,7 @@ struct CommandLineSetterGetter {
 
 impl SetterGetter for CommandLineSetterGetter {
 
-    fn get(&self) -> Result<u8, Box<dyn Error>> {
+    fn get(&mut self) -> Result<u8, Box<dyn Error>> {
         let output = Command::new("sh")
             .arg("-c")
             .arg(self.get_command.clone())
@@ -68,7 +68,7 @@ impl SetterGetter for CommandLineSetterGetter {
         Ok(res)
     }
 
-    fn set(&self, value: u8) -> Result<(), Box<dyn Error>> {
+    fn set(&mut self, value: u8) -> Result<(), Box<dyn Error>> {
         Command::new("sh")
             .arg("-c")
             .arg(self.set_command.replace("{}", format!("{}", value).as_str()))
@@ -88,7 +88,10 @@ fn command_line_slider(name: String, get_command: String, set_command: String) -
 }
 
 pub struct Sliders {
-    sliders: Vec<Slider>
+    pub sliders: Vec<Slider>,
+    pub coordinates_percent: (u16, u16),
+    pub size_percent: (u16, u16),
+    pub current: usize,
 }
 
 impl Sliders {
@@ -98,15 +101,16 @@ impl Sliders {
         Ok(())
     }
 
-    fn draw(sliders: &Vec<Slider>, current: &mut usize) -> Result<(), Box<dyn Error>> {
-        let (cols, rows) = size()?; 
-        Sliders::clear()?;
-        let vertical_margin = 4;
-        let spaces_count = (cols as usize / sliders.len() - 5) / 2;
+    pub fn draw(&self) -> Result<(), Box<dyn Error>> {
+        let (total_cols, total_rows) = size()?; 
+        let (cols, rows) = (total_cols * self.size_percent.0 / 100, total_rows * self.size_percent.1 / 100);
+        let (x0, y0) = (total_cols * self.coordinates_percent.0 / 100, total_rows * self.coordinates_percent.1 / 100);
+        let vertical_margin = 10 * self.size_percent.1 / 100;
+        let spaces_count = (cols as usize / self.sliders.len() - 5) / 2;
         let spaces = format!("{:width$}", "", width=spaces_count);
         for y in 0..(rows - 1) {
-            stdout().execute(MoveTo(0, y))?;
-            for (i, slider) in sliders.iter().enumerate() {
+            stdout().execute(MoveTo(x0, y0 + y))?;
+            for (i, slider) in self.sliders.iter().enumerate() {
                 let value = slider.current as u16;
                 let start_y = (rows - vertical_margin) * (100 - value) / 100;
                 if y > vertical_margin && y < (rows - vertical_margin) {
@@ -131,12 +135,12 @@ impl Sliders {
                 }
                 else if y == (rows - vertical_margin + 1) {
                     let title = &slider.name;
-                    let spaces_count = (cols as usize / sliders.len() - title.len() - 2) / 2;
+                    let spaces_count = (cols as usize / self.sliders.len() - title.len() - 2) / 2;
                     let spaces = format!("{:width$}", "", width=spaces_count);
                     print!("{}", spaces);
-                    print!("{}", if i == *current { "<" } else { " " });
+                    print!("{}", if i == self.current { "<" } else { " " });
                     print!("{}", title);
-                    print!("{}", if i == *current { ">" } else { " " });
+                    print!("{}", if i == self.current { ">" } else { " " });
                     print!("{}", spaces);
                 }
             }
@@ -173,28 +177,36 @@ impl Sliders {
         "#);
         enable_raw_mode()?;
         Sliders::read_key()?;
+        Sliders::clear()?;
         Ok(())
     }
 
+    pub fn prompt(&mut self) -> Result<bool, Box<dyn Error>> {
+        match Sliders::read_key()? {
+            (KeyCode::Char('h'), _) | (KeyCode::Left, _) => if self.current > 0 { self.current -= 1 },
+            (KeyCode::Char('l'), _) | (KeyCode::Right, _) => if self.current < (self.sliders.len() - 1) { self.current += 1 },
+            (KeyCode::Char('k'), _) | (KeyCode::Up, _) => self.sliders[self.current].inc(1)?,
+            (KeyCode::Char('j'), _) | (KeyCode::Down , _)=> self.sliders[self.current].dec(1)?,
+            (KeyCode::Char('g'), _) => self.sliders[self.current].set(0)?,
+            (KeyCode::Char('G'), _) => self.sliders[self.current].set(100)?,
+            (KeyCode::Char('m'), _) => self.sliders[self.current].set(50)?,
+            (KeyCode::Char('?'), _) => Sliders::print_help()?,
+            (KeyCode::Char('q'), _) => return Ok(false),
+            (KeyCode::Char('u'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[self.current].inc(10)?,
+            (KeyCode::Char('d'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[self.current].dec(10)?,
+            _ => {},
+        };
+        Ok(true)
+    }
+
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut current = 0;
         stdout().execute(Hide)?;
+        Sliders::clear()?;
         enable_raw_mode()?;
         loop {
-            Sliders::draw(&self.sliders, &mut current)?;
-            match Sliders::read_key()? {
-                (KeyCode::Char('h'), _) | (KeyCode::Left, _) => if current > 0 { current -= 1 },
-                (KeyCode::Char('l'), _) | (KeyCode::Right, _) => if current < (self.sliders.len() - 1) { current += 1 },
-                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => self.sliders[current].inc(1)?,
-                (KeyCode::Char('j'), _) | (KeyCode::Down , _)=> self.sliders[current].dec(1)?,
-                (KeyCode::Char('g'), _) => self.sliders[current].set(0)?,
-                (KeyCode::Char('G'), _) => self.sliders[current].set(100)?,
-                (KeyCode::Char('m'), _) => self.sliders[current].set(50)?,
-                (KeyCode::Char('?'), _) => Sliders::print_help()?,
-                (KeyCode::Char('q'), _) => break,
-                (KeyCode::Char('u'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].inc(10)?,
-                (KeyCode::Char('d'), x) if x.contains(KeyModifiers::CONTROL) => self.sliders[current].dec(10)?,
-                _ => {},
+            self.draw()?;
+            if !self.prompt()? {
+                break;
             }
         }
         disable_raw_mode()?;
@@ -235,7 +247,7 @@ impl Sliders {
             slider.initialize()?;
         }
 
-        Ok(Sliders { sliders })
+        Ok(Sliders { sliders, coordinates_percent: (0, 0), size_percent: (100, 100), current: 0 })
     }
 
 }
